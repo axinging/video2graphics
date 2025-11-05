@@ -114,7 +114,6 @@ async function renderWithWebGPU(params, videoFrame, resourceCache) {
     });
   }
 
-  // 创建顶点缓冲区
   let vertexBuffer = resourceCache.vertexBuffer;
   if (!vertexBuffer) {
     vertexBuffer = device.createBuffer({
@@ -127,7 +126,6 @@ async function renderWithWebGPU(params, videoFrame, resourceCache) {
     resourceCache.vertexBuffer = vertexBuffer;
   }
 
-  // 创建 bind group
   const bindGroup = device.createBindGroup({
     layout: params.renderPipeline.getBindGroupLayout(0),
     entries: [
@@ -136,7 +134,7 @@ async function renderWithWebGPU(params, videoFrame, resourceCache) {
     ],
   });
 
-  // 渲染到 canvas
+
   const commandEncoder = device.createCommandEncoder();
   const textureView = context.getCurrentTexture().createView();
   const renderPass = commandEncoder.beginRenderPass({
@@ -198,17 +196,14 @@ export async function createWebGPUBlurRenderer(segmenter, zeroCopy, directOutput
     usage: GPUTextureUsage.RENDER_ATTACHMENT,
   });
 
-  // 创建着色器模块
   const vertexModule = device.createShaderModule({ code: vertexShaderCode });
   const fragmentModule = device.createShaderModule({ code: fragmentShaderCode });
 
-  // 创建采样器
   const renderSampler = device.createSampler({
     magFilter: 'linear',
     minFilter: 'linear',
   });
 
-  // 创建渲染管线
   const renderPipeline = device.createRenderPipeline({
     layout: 'auto',
     vertex: {

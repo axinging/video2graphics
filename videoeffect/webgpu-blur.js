@@ -10,15 +10,15 @@ let rendererSwitchRequested = false;
 
 function getZeroCopyFromUrl() {
   const params = new URLSearchParams(window.location.search);
-  // 如果没有 zerocopy 参数，直接返回 1
   if (!params.has('zerocopy')) return 1;
-  // 有参数时，'true' 返回 1，否则返回 0
   return params.get('zerocopy') === '1' ? 1 : 0;
 }
 
 async function loadRendererFromUrl() {
   const params = new URLSearchParams(window.location.search);
   const rendererType = params.get('renderer') || 'webgpucompute';
+  const wgsx = Number(params.get('wgsx') || '8');
+  const wgsy = Number(params.get('wgsy') || '8');
 
   let rendererModule;
   if (rendererType === 'webgpucompute') {
@@ -28,7 +28,7 @@ async function loadRendererFromUrl() {
   } else{
     rendererModule = await import('./webgl-renderer.js');
   }
-  return  {rendererModule, rendererType};
+  return  {rendererModule, rendererType, wgsx, wgsy};
 }
 
 
