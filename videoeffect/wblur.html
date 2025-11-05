@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Virtual Background Effect</title>
+  <style>
+    video,
+    canvas {
+      position: absolute;
+      top: 20;
+      left: 0;
+      transform: scaleX(-1);
+    }
+
+    canvas {
+      z-index: 1;
+    }
+  </style>
+</head>
+
+<body>
+        <div id="fpsDisplay" style="font: 1em sans-serif; margin-top: 5px; color: #666;">FPS: --</div>
+        <button id="startButton" style="padding: 10px 20px; font-size: 16px; background-color: #4CAF50; color: white; border: none; border-radius: 5px; cursor: pointer;">
+        Start Video Processing
+      </button>
+      <button id="stopButton" style="padding: 10px 20px; font-size: 16px; background-color: #f44336; color: white; border: none; border-radius: 5px; cursor: pointer; margin-left: 10px; display: none;">
+        Stop
+      </button>
+  <div>
+    <video id="webcam" autoplay playsinline muted style="display: none;"></video>
+    <video id="processedVideo" autoplay playsinline muted style="display: none;"></video>
+    <canvas id="output" style="display: none;"></canvas>
+  </div>
+  <script type="module" src="webgpu-blur.js"></script>
+</body>
+
+</html>
