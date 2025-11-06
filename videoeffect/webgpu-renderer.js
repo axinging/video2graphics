@@ -147,35 +147,12 @@ async function renderWithWebGPU(params, videoFrame, resourceCache) {
 
   return processedVideoFrame;
 }
-/*
-function loadConfigFromUrl() {
-  const params = new URLSearchParams(window.location.search);
-  const wgsx = Number(params.get('wgsx') || '8');
-  const wgsy = Number(params.get('wgsy') || '8');
-  return [wgsx, wgsy];
-}
-
-function getZeroCopyFromUrl() {
-  const params = new URLSearchParams(window.location.search);
-  if (!params.has('zerocopy')) return true;
-  return params.get('zerocopy') === 'true' ? true : false;
-}*/
-
-function loadConfigFromUrl() {
-  const params = new URLSearchParams(window.location.search);
-  const wgsX = Number(params.get('wgsx') || '8');
-  const wgsY = Number(params.get('wgsy') || '8');
-  const zeroCopy = params.has('zerocopy') ? (params.get('zerocopy') === 'true' || params.get('zerocopy') === '1') : true;
-  const directOutput = params.has('directoutput') ? (params.get('directoutput') === 'true' || params.get('directoutput') === '1') : true;
-  return { wgsX: wgsX, wgsY: wgsY, zeroCopy: zeroCopy, directOutput: directOutput };
-}
 
 // WebGPU blur renderer (vertex+fragment shader)
-export async function createWebGPUBlurRenderer(segmenter) {
-  const config = loadConfigFromUrl();
+export async function createWebGPUBlurRenderer(segmenter, config) {
   console.log(
       'createWebGPUBlurRenderer zeroCopy: ', config.zeroCopy,
-      ' directOutput: ', config.directOutput);
+      ' directOutput: ', config.directOutput, ' bilinearFiltering', config.bilinearFiltering);
   // Always use full resolution for processing, regardless of display size
   const webgpuCanvas = new OffscreenCanvas(1280, 720);
 
@@ -224,9 +201,21 @@ fn main(@location(0) pos: vec2<f32>, @location(1) uv: vec2<f32>) -> VertexOutput
 `;
 
 
-  // @group(0) @binding(0) var inputTexture: ${zeroCopy ? "texture_external" :
-  // "texture_2d<f32>"}; Fragment shader WGSL
-  const fragmentShaderCode = `
+  // Fragment shader WGSL
+  const fragmentShaderCode = config.bilinearFiltering ? `
+@group(0) @binding(0) var inputTexture: ${
+      config.zeroCopy ? 'texture_external' : 'texture_2d<f32>'};
+@group(0) @binding(1) var textureSampler: sampler;
+
+@fragment
+fn main(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
+  let texelSize = 1.0 / vec2<f32>(textureDimensions(inputTexture));
+  let uv_center = uv + 0.5 * texelSize.x * vec2<f32>(1.0, 0.0);
+  let color = textureSampleBaseClampToEdge(inputTexture, textureSampler, uv_center);
+  return color;
+}
+`:
+`
 @group(0) @binding(0) var inputTexture: ${
       config.zeroCopy ? 'texture_external' : 'texture_2d<f32>'};
 @group(0) @binding(1) var textureSampler: sampler;
@@ -236,7 +225,8 @@ fn main(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
   var originalColor = textureSampleBaseClampToEdge(inputTexture, textureSampler, uv);
   return originalColor;
 }
-`;
+`
+;
 
   const vertexModule = device.createShaderModule({code: vertexShaderCode});
   const fragmentModule = device.createShaderModule({code: fragmentShaderCode});

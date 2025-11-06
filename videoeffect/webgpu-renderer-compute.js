@@ -136,19 +136,12 @@ async function renderWithWebGPU(params, videoFrame, resourceCache, wgs) {
   return processedVideoFrame;
 }
 
-function loadConfigFromUrl() {
-  const params = new URLSearchParams(window.location.search);
-  const wgsx = Number(params.get('wgsx') || '8');
-  const wgsy = Number(params.get('wgsy') || '8');
-  return [wgsx, wgsy];
-}
-
 // WebGPU blur renderer
 export async function createWebGPUBlurRenderer(
-    segmenter, zeroCopy, directOutput, loop) {
+    segmenter, config) {
   console.log(
-      'createWebGPUBlurRenderer zeroCopy: ', zeroCopy,
-      ' directOutput: ', directOutput);
+      'createWebGPUBlurRenderer zeroCopy: ', config.zeroCopy,
+      ' directOutput: ', config.directOutput, ' bilinearFiltering', config.bilinearFiltering);
   // Always use full resolution for processing, regardless of display size
   const webgpuCanvas = new OffscreenCanvas(1280, 720);
 
@@ -178,30 +171,20 @@ export async function createWebGPUBlurRenderer(
     format: navigator.gpu.getPreferredCanvasFormat(),
     alphaMode: 'premultiplied',
     usage: GPUTextureUsage.RENDER_ATTACHMENT |
-        (directOutput ?
+        (config.directOutput ?
              GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.COPY_DST :
              0),
   });
 
-  // --- Slut på nedskalningsresurser ---
-  const wgs = loadConfigFromUrl();
-
   // WebGPU compute shader for blur effect
   const computeShaderCode = `
       @group(0) @binding(0) var inputTexture: ${
-      zeroCopy ? 'texture_external' : 'texture_2d<f32>'};
+      config.zeroCopy ? 'texture_external' : 'texture_2d<f32>'};
       @group(0) @binding(1) var outputTexture: texture_storage_2d<${
-      getTextureFormat(directOutput)}, write>;
+      getTextureFormat(config.directOutput)}, write>;
       @group(0) @binding(2) var textureSampler: sampler;
-      /*
-      struct Uniforms {
-        resolution: vec2<f32>,
-        blurAmount: f32,
-      };
-      @group(0) @binding(4) var<uniform> uniforms: Uniforms;
-      */
       
-      @compute @workgroup_size(${wgs[0]}, ${wgs[1]})
+      @compute @workgroup_size(${config.wgs[0]}, ${config.wgs[1]})
       fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         let inputDims = textureDimensions(inputTexture);
         
@@ -215,7 +198,6 @@ export async function createWebGPUBlurRenderer(
         var originalColor = textureSampleBaseClampToEdge(inputTexture, textureSampler, uv);
             
         textureStore(outputTexture, coord, originalColor);
-        // textureStore(outputTexture, coord, vec4<f32>(0.0, 0.0, 0.0, 1.0));
       }
     `;
 
@@ -264,12 +246,12 @@ export async function createWebGPUBlurRenderer(
         blurSampler,
         // uniformBuffer,
         renderSampler,
-        zeroCopy,
-        directOutput,
+        zeroCopy: config.zeroCopy,
+        directOutput: config.directOutput,
         segmenter
       };
       try {
-        return await renderWithWebGPU(params, videoFrame, resourceCache, wgs);
+        return await renderWithWebGPU(params, videoFrame, resourceCache, config.wgs);
       } catch (error) {
         console.warn('WebGPU rendering failed:', error);
       }

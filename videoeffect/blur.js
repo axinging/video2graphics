@@ -28,9 +28,21 @@ async function loadRendererFromUrl() {
 }
 
 
+function loadConfigFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const wgsX = Number(params.get('wgsx') || '8');
+  const wgsY = Number(params.get('wgsy') || '8');
+  const zeroCopy = params.has('zerocopy') ? (params.get('zerocopy') === 'true' || params.get('zerocopy') === '1') : true;
+  const directOutput = params.has('directoutput') ? (params.get('directoutput') === 'true' || params.get('directoutput') === '1') : true;
+  const bilinearFiltering = params.has('bilinearfiltering') ? (params.get('bilinearfiltering') === 'true' || params.get('bilinearfiltering') === '1') : true;
+  // bilinearFiltering？
+  return { wgs: [wgsX, wgsY], zeroCopy: zeroCopy, directOutput: directOutput, bilinearFiltering: bilinearFiltering };
+}
+
 // Initialize blur renderer based on radio buttons
 async function initializeBlurRenderer() {
   const {rendererModule, rendererType} = await loadRendererFromUrl();
+  const config = loadConfigFromUrl();
   const useWebGPU =
       (rendererType === 'webgpucompute' || rendererType === 'webgpugraphics');
   const segmenterFunction = null
@@ -39,11 +51,11 @@ async function initializeBlurRenderer() {
     // const rendererModule = await loadRendererFromUrl();
 
     if (useWebGPU && 'gpu' in navigator) {
-      appBlurRenderer = await rendererModule.createWebGPUBlurRenderer(segmenterFunction);
+      appBlurRenderer = await rendererModule.createWebGPUBlurRenderer(segmenterFunction, config);
       // appStatus.innerText = 'Renderer: WebGPU';
       console.log('Using WebGPU for blur rendering');
     } else {
-      appBlurRenderer = await rendererModule.createWebGL2BlurRenderer(segmenterFunction);
+      appBlurRenderer = await rendererModule.createWebGL2BlurRenderer(segmenterFunction, config);
       // appStatus.innerText = 'Renderer: WebGL2';
       console.log('Using WebGL2 for blur rendering');
     }
@@ -277,7 +289,7 @@ function initializeCompatibilityInfo() {
   }
 }
 
-async function startVideoProcessing() {
+export async function startVideoProcessing() {
   if (isRunning) return;
   try {
     appStream = await navigator.mediaDevices.getUserMedia(
@@ -339,6 +351,8 @@ function stopVideoProcessing() {
 
   appFpsDisplay.textContent = 'FPS: --';
 }
+
+window.startVideoProcessing = startVideoProcessing;
 
 function updateOptionState() {
   const isWebGPU = webgpuRadio.checked;
