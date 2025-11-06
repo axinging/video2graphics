@@ -34,8 +34,8 @@ function loadConfigFromUrl() {
   const wgsY = Number(params.get('wgsy') || '8');
   const zeroCopy = params.has('zerocopy') ? (params.get('zerocopy') === 'true' || params.get('zerocopy') === '1') : true;
   const directOutput = params.has('directoutput') ? (params.get('directoutput') === 'true' || params.get('directoutput') === '1') : true;
-  const bilinearFiltering = params.has('bilinearfiltering') ? (params.get('bilinearfiltering') === 'true' || params.get('bilinearfiltering') === '1') : true;
-  const blur = params.has('blur') ? (params.get('blur') === 'true' || params.get('blur') === '1') : true;
+  const bilinearFiltering = params.has('bilinearfiltering') ? (params.get('bilinearfiltering') === 'true' || params.get('bilinearfiltering') === '1') : false;
+  const blur = params.has('blur') ? (params.get('blur') === 'true' || params.get('blur') === '1') : false;
   // bilinearFiltering？
   return { wgs: [wgsX, wgsY], zeroCopy: zeroCopy, directOutput: directOutput, bilinearFiltering: bilinearFiltering, blur: blur };
 }

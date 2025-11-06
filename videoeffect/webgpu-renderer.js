@@ -200,9 +200,10 @@ fn main(@location(0) pos: vec2<f32>, @location(1) uv: vec2<f32>) -> VertexOutput
 }
 `;
 
-
   // Fragment shader WGSL
-  const fragmentShaderCode = config.bilinearFiltering ? `
+  var fragmentShaderCode;
+  if (config.bilinearFiltering) {
+  fragmentShaderCode = `
 @group(0) @binding(0) var inputTexture: ${
       config.zeroCopy ? 'texture_external' : 'texture_2d<f32>'};
 @group(0) @binding(1) var textureSampler: sampler;
@@ -214,7 +215,29 @@ fn main(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
   let color = textureSampleBaseClampToEdge(inputTexture, textureSampler, uv_center);
   return color;
 }
-`:
+`; 
+  } else  if(config.blur) {
+  const blurRadius = config.blurRadius || 4;
+  fragmentShaderCode = `
+    @group(0) @binding(0) var inputTexure: ${config.zeroCopy ? 'texture_external' : 'texture_2d<f32>'};
+    @group(0) @binding(1) var textureSampler: sampler;
+
+    @fragment
+    fn main(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
+      let dims = vec2f(textureDimensions(inputTexure));
+      var color = vec3f(0.0, 0.0, 0.0);
+      let samples = ${(2 * blurRadius + 1) * (2 * blurRadius + 1)};
+      for (var dx = -${blurRadius}; dx <= ${blurRadius}; dx++) {
+        for (var dy = -${blurRadius}; dy <= ${blurRadius}; dy++) {
+          let offset = vec2f(f32(dx), f32(dy)) / dims;
+          color += textureSampleBaseClampToEdge(inputTexure, textureSampler, uv + offset).rgb;
+        }
+      }
+      return vec4f(color / f32(samples), 1.0);
+    }
+  `;
+  } else {
+   fragmentShaderCode =
 `
 @group(0) @binding(0) var inputTexture: ${
       config.zeroCopy ? 'texture_external' : 'texture_2d<f32>'};
@@ -225,8 +248,8 @@ fn main(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
   var originalColor = textureSampleBaseClampToEdge(inputTexture, textureSampler, uv);
   return originalColor;
 }
-`
-;
+`;
+  }
 
   const vertexModule = device.createShaderModule({code: vertexShaderCode});
   const fragmentModule = device.createShaderModule({code: fragmentShaderCode});
