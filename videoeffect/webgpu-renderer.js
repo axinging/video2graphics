@@ -4,7 +4,7 @@ function getTextureFormat(directOutput) {
 
 function getOrCreateResource(cache, key, createFn) {
   if (!cache[key]) {
-    console.log("Creating new resource for ", key);
+    console.log('Creating new resource for ', key);
     cache[key] = createFn();
   }
   return cache[key];
@@ -17,7 +17,9 @@ function getOrCreateTexture(device, cache, key, size, directOutput, usage) {
 
   let texture = cache[cacheKey];
   if (!texture || texture.width !== width || texture.height !== height) {
-    console.log("Creating new texture for ", cacheKey, " with format ", format, " and usage ", usage);
+    console.log(
+        'Creating new texture for ', cacheKey, ' with format ', format,
+        ' and usage ', usage);
     if (texture) {
       texture.destroy();
     }
@@ -31,48 +33,31 @@ function getOrCreateTexture(device, cache, key, size, directOutput, usage) {
   return texture;
 }
 
-// Vertex shader WGSL
-const vertexShaderCode = `
-struct VertexOutput {
-  @builtin(position) position: vec4<f32>,
-  @location(0) uv: vec2<f32>
-};
-
-@vertex
-fn main(@location(0) pos: vec2<f32>, @location(1) uv: vec2<f32>) -> VertexOutput {
-  var out: VertexOutput;
-  out.position = vec4<f32>(pos, 0.0, 1.0);
-  out.uv = vec2<f32>(uv.x, 1.0 - uv.y);
-  return out;
-}
-`;
-
-// Fragment shader WGSL
-const fragmentShaderCode = `
-@group(0) @binding(0) var inputTexture: texture_2d<f32>;
-@group(0) @binding(1) var textureSampler: sampler;
-
-@fragment
-fn main(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
-  var originalColor = textureSampleBaseClampToEdge(inputTexture, textureSampler, uv);
-  return originalColor;
-}
-`;
-
-// 顶点数据：全屏矩形
 const vertexData = new Float32Array([
   // pos.x, pos.y, uv.x, uv.y
-  -1, -1, 0, 0,
-   1, -1, 1, 0,
-  -1,  1, 0, 1,
-   1,  1, 1, 1,
+  -1,
+  -1,
+  0,
+  0,
+  1,
+  -1,
+  1,
+  0,
+  -1,
+  1,
+  0,
+  1,
+  1,
+  1,
+  1,
+  1,
 ]);
 
 const vertexBufferLayout = {
   arrayStride: 4 * 4,
   attributes: [
-    { shaderLocation: 0, offset: 0, format: 'float32x2' }, // pos
-    { shaderLocation: 1, offset: 2 * 4, format: 'float32x2' }, // uv
+    {shaderLocation: 0, offset: 0, format: 'float32x2'},      // pos
+    {shaderLocation: 1, offset: 2 * 4, format: 'float32x2'},  // uv
   ],
 };
 
@@ -90,16 +75,14 @@ async function renderWithWebGPU(params, videoFrame, resourceCache) {
       source: videoFrame,
     });
   } else {
-    sourceTexture = getOrCreateTexture(device, resourceCache, 'sourceTexture',
-      [width, height, 1],
-      params.directOutput,
-      GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT);
+    sourceTexture = getOrCreateTexture(
+        device, resourceCache, 'sourceTexture', [width, height, 1],
+        params.directOutput,
+        GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST |
+            GPUTextureUsage.RENDER_ATTACHMENT);
 
     device.queue.copyExternalImageToTexture(
-      { source: videoFrame },
-      { texture: sourceTexture },
-      [width, height]
-    );
+        {source: videoFrame}, {texture: sourceTexture}, [width, height]);
   }
 
   // Update canvas size only if video resolution actually changed
@@ -129,8 +112,11 @@ async function renderWithWebGPU(params, videoFrame, resourceCache) {
   const bindGroup = device.createBindGroup({
     layout: params.renderPipeline.getBindGroupLayout(0),
     entries: [
-      { binding: 0, resource: params.zeroCopy ? sourceTexture : sourceTexture.createView()},
-      { binding: 1, resource: params.renderSampler },
+      {
+        binding: 0,
+        resource: params.zeroCopy ? sourceTexture : sourceTexture.createView()
+      },
+      {binding: 1, resource: params.renderSampler},
     ],
   });
 
@@ -142,7 +128,7 @@ async function renderWithWebGPU(params, videoFrame, resourceCache) {
       view: textureView,
       loadOp: 'clear',
       storeOp: 'store',
-      clearValue: { r: 0, g: 0, b: 0, a: 1 },
+      clearValue: {r: 0, g: 0, b: 0, a: 1},
     }],
   });
 
@@ -155,17 +141,19 @@ async function renderWithWebGPU(params, videoFrame, resourceCache) {
   device.queue.submit([commandEncoder.finish()]);
 
   // Create a new VideoFrame from the processed WebGPU canvas
-  const processedVideoFrame = new VideoFrame(webgpuCanvas, {
-    timestamp: videoFrame.timestamp,
-    duration: videoFrame.duration
-  });
+  const processedVideoFrame = new VideoFrame(
+      webgpuCanvas,
+      {timestamp: videoFrame.timestamp, duration: videoFrame.duration});
 
   return processedVideoFrame;
 }
 
 // WebGPU blur renderer (vertex+fragment shader)
-export async function createWebGPUBlurRenderer(segmenter, zeroCopy, directOutput, loop) {
-  console.log("createWebGPUBlurRenderer zeroCopy: ", zeroCopy, " directOutput: ", directOutput);
+export async function createWebGPUBlurRenderer(
+    segmenter, zeroCopy, directOutput, loop) {
+  console.log(
+      'createWebGPUBlurRenderer zeroCopy: ', zeroCopy,
+      ' directOutput: ', directOutput);
   // Always use full resolution for processing, regardless of display size
   const webgpuCanvas = new OffscreenCanvas(1280, 720);
 
@@ -175,14 +163,15 @@ export async function createWebGPUBlurRenderer(segmenter, zeroCopy, directOutput
   }
 
   // Ensure we're compatible with directOutput
-  console.log("Adapter features:");
+  console.log('Adapter features:');
   for (const feature of adapter.features) {
     console.log(`- ${feature}`);
   }
   if (!adapter.features.has('bgra8unorm-storage')) {
-    console.log("BGRA8UNORM-STORAGE not supported");
+    console.log('BGRA8UNORM-STORAGE not supported');
   }
-  const device = await adapter.requestDevice({ requiredFeatures: ['bgra8unorm-storage'] });
+  const device =
+      await adapter.requestDevice({requiredFeatures: ['bgra8unorm-storage']});
   const context = webgpuCanvas.getContext('webgpu');
 
   if (!context) {
@@ -196,8 +185,39 @@ export async function createWebGPUBlurRenderer(segmenter, zeroCopy, directOutput
     usage: GPUTextureUsage.RENDER_ATTACHMENT,
   });
 
-  const vertexModule = device.createShaderModule({ code: vertexShaderCode });
-  const fragmentModule = device.createShaderModule({ code: fragmentShaderCode });
+  // Vertex shader WGSL
+  const vertexShaderCode = `
+struct VertexOutput {
+  @builtin(position) position: vec4<f32>,
+  @location(0) uv: vec2<f32>
+};
+
+@vertex
+fn main(@location(0) pos: vec2<f32>, @location(1) uv: vec2<f32>) -> VertexOutput {
+  var out: VertexOutput;
+  out.position = vec4<f32>(pos, 0.0, 1.0);
+  out.uv = vec2<f32>(uv.x, 1.0 - uv.y);
+  return out;
+}
+`;
+
+
+  // @group(0) @binding(0) var inputTexture: ${zeroCopy ? "texture_external" :
+  // "texture_2d<f32>"}; Fragment shader WGSL
+  const fragmentShaderCode = `
+@group(0) @binding(0) var inputTexture: ${
+      zeroCopy ? 'texture_external' : 'texture_2d<f32>'};
+@group(0) @binding(1) var textureSampler: sampler;
+
+@fragment
+fn main(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
+  var originalColor = textureSampleBaseClampToEdge(inputTexture, textureSampler, uv);
+  return originalColor;
+}
+`;
+
+  const vertexModule = device.createShaderModule({code: vertexShaderCode});
+  const fragmentModule = device.createShaderModule({code: fragmentShaderCode});
 
   const renderSampler = device.createSampler({
     magFilter: 'linear',
@@ -214,9 +234,9 @@ export async function createWebGPUBlurRenderer(segmenter, zeroCopy, directOutput
     fragment: {
       module: fragmentModule,
       entryPoint: 'main',
-      targets: [{ format: navigator.gpu.getPreferredCanvasFormat() }],
+      targets: [{format: navigator.gpu.getPreferredCanvasFormat()}],
     },
-    primitive: { topology: 'triangle-strip' },
+    primitive: {topology: 'triangle-strip'},
   });
 
   const resourceCache = {};

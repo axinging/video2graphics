@@ -4,7 +4,7 @@ function getTextureFormat(directOutput) {
 
 function getOrCreateResource(cache, key, createFn) {
   if (!cache[key]) {
-    console.log("Creating new resource for ", key);
+    console.log('Creating new resource for ', key);
     cache[key] = createFn();
   }
   return cache[key];
@@ -17,7 +17,9 @@ function getOrCreateTexture(device, cache, key, size, directOutput, usage) {
 
   let texture = cache[cacheKey];
   if (!texture || texture.width !== width || texture.height !== height) {
-    console.log("Creating new texture for ", cacheKey, " with format ", format, " and usage ", usage);
+    console.log(
+        'Creating new texture for ', cacheKey, ' with format ', format,
+        ' and usage ', usage);
     if (texture) {
       texture.destroy();
     }
@@ -44,16 +46,16 @@ async function renderWithWebGPU(params, videoFrame, resourceCache, wgs) {
       source: videoFrame,
     });
   } else {
-    sourceTexture = getOrCreateTexture(device, resourceCache, 'sourceTexture',
-      [videoFrame.displayWidth, videoFrame.displayHeight, 1],
-      params.directOutput,
-      GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.RENDER_ATTACHMENT);
+    sourceTexture = getOrCreateTexture(
+        device, resourceCache, 'sourceTexture',
+        [videoFrame.displayWidth, videoFrame.displayHeight, 1],
+        params.directOutput,
+        GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST |
+            GPUTextureUsage.RENDER_ATTACHMENT);
 
     device.queue.copyExternalImageToTexture(
-      { source: videoFrame },
-      { texture: sourceTexture },
-      [videoFrame.displayWidth, videoFrame.displayHeight]
-    );
+        {source: videoFrame}, {texture: sourceTexture},
+        [videoFrame.displayWidth, videoFrame.displayHeight]);
   }
 
   // Always process at full video resolution, ignore display size
@@ -61,7 +63,8 @@ async function renderWithWebGPU(params, videoFrame, resourceCache, wgs) {
   const processingHeight = videoFrame.displayHeight || 720;
 
   // Update canvas size only if video resolution actually changed
-  if (webgpuCanvas.width !== processingWidth || webgpuCanvas.height !== processingHeight) {
+  if (webgpuCanvas.width !== processingWidth ||
+      webgpuCanvas.height !== processingHeight) {
     webgpuCanvas.width = processingWidth;
     webgpuCanvas.height = processingHeight;
     // Reconfigure context with actual video size
@@ -69,19 +72,24 @@ async function renderWithWebGPU(params, videoFrame, resourceCache, wgs) {
       device: device,
       format: navigator.gpu.getPreferredCanvasFormat(),
       alphaMode: 'premultiplied',
-      usage: GPUTextureUsage.RENDER_ATTACHMENT | (params.directOutput ? GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.COPY_DST : 0),
+      usage: GPUTextureUsage.RENDER_ATTACHMENT |
+          (params.directOutput ?
+               GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.COPY_DST :
+               0),
     });
   }
 
-  const outputTexture = getOrCreateTexture(device, resourceCache, 'outputTexture',
-    [width, height, 1],
-    params.directOutput,
-    GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.COPY_SRC | GPUTextureUsage.TEXTURE_BINDING);
+  const outputTexture = getOrCreateTexture(
+      device, resourceCache, 'outputTexture', [width, height, 1],
+      params.directOutput,
+      GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.COPY_SRC |
+          GPUTextureUsage.TEXTURE_BINDING);
 
   // Update uniform buffer
   const hasUniform = false;
   if (hasUniform) {
-    const uniformData = new Float32Array([width, height, 6.0]); // resolution, blurAmount
+    const uniformData =
+        new Float32Array([width, height, 6.0]);  // resolution, blurAmount
     device.queue.writeBuffer(params.uniformBuffer, 0, uniformData);
   }
 
@@ -89,17 +97,19 @@ async function renderWithWebGPU(params, videoFrame, resourceCache, wgs) {
   const canvasTexture = params.context.getCurrentTexture();
   const bindGroup = device.createBindGroup({
     layout: params.computePipeline.getBindGroupLayout(0),
-    label: "blurBindGroup",
+    label: 'blurBindGroup',
     entries: [
       {
-        binding: 0, resource: params.zeroCopy ? sourceTexture : sourceTexture.createView()
+        binding: 0,
+        resource: params.zeroCopy ? sourceTexture : sourceTexture.createView()
       },
       {
         binding: 1,
-        resource: params.directOutput ? canvasTexture.createView() : outputTexture.createView(),
+        resource: params.directOutput ? canvasTexture.createView() :
+                                        outputTexture.createView(),
         // resource: outputTexture.createView(),
       },
-      { binding: 2, resource: params.blurSampler },
+      {binding: 2, resource: params.blurSampler},
       // { binding: 3, resource: { buffer: params.uniformBuffer } },
     ],
   });
@@ -119,10 +129,9 @@ async function renderWithWebGPU(params, videoFrame, resourceCache, wgs) {
   device.queue.submit([commandEncoder.finish()]);
 
   // Create a new VideoFrame from the processed WebGPU canvas
-  const processedVideoFrame = new VideoFrame(params.webgpuCanvas, {
-    timestamp: videoFrame.timestamp,
-    duration: videoFrame.duration
-  });
+  const processedVideoFrame = new VideoFrame(
+      params.webgpuCanvas,
+      {timestamp: videoFrame.timestamp, duration: videoFrame.duration});
 
   return processedVideoFrame;
 }
@@ -131,12 +140,15 @@ function loadConfigFromUrl() {
   const params = new URLSearchParams(window.location.search);
   const wgsx = Number(params.get('wgsx') || '8');
   const wgsy = Number(params.get('wgsy') || '8');
-  return  [wgsx, wgsy];
+  return [wgsx, wgsy];
 }
 
 // WebGPU blur renderer
-export async function createWebGPUBlurRenderer(segmenter, zeroCopy, directOutput, loop) {
-  console.log("createWebGPUBlurRenderer zeroCopy: ", zeroCopy, " directOutput: ", directOutput);
+export async function createWebGPUBlurRenderer(
+    segmenter, zeroCopy, directOutput, loop) {
+  console.log(
+      'createWebGPUBlurRenderer zeroCopy: ', zeroCopy,
+      ' directOutput: ', directOutput);
   // Always use full resolution for processing, regardless of display size
   const webgpuCanvas = new OffscreenCanvas(1280, 720);
 
@@ -146,14 +158,15 @@ export async function createWebGPUBlurRenderer(segmenter, zeroCopy, directOutput
   }
 
   // Ensure we're compatible with directOutput
-  console.log("Adapter features:");
+  console.log('Adapter features:');
   for (const feature of adapter.features) {
     console.log(`- ${feature}`);
   }
   if (!adapter.features.has('bgra8unorm-storage')) {
-    console.log("BGRA8UNORM-STORAGE not supported");
+    console.log('BGRA8UNORM-STORAGE not supported');
   }
-  const device = await adapter.requestDevice({ requiredFeatures: ['bgra8unorm-storage'] });
+  const device =
+      await adapter.requestDevice({requiredFeatures: ['bgra8unorm-storage']});
   const context = webgpuCanvas.getContext('webgpu');
 
   if (!context) {
@@ -164,16 +177,21 @@ export async function createWebGPUBlurRenderer(segmenter, zeroCopy, directOutput
     device: device,
     format: navigator.gpu.getPreferredCanvasFormat(),
     alphaMode: 'premultiplied',
-    usage: GPUTextureUsage.RENDER_ATTACHMENT | (directOutput ? GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.COPY_DST : 0),
+    usage: GPUTextureUsage.RENDER_ATTACHMENT |
+        (directOutput ?
+             GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.COPY_DST :
+             0),
   });
 
-   // --- Slut på nedskalningsresurser ---
-   const wgs = loadConfigFromUrl();
+  // --- Slut på nedskalningsresurser ---
+  const wgs = loadConfigFromUrl();
 
   // WebGPU compute shader for blur effect
-   const computeShaderCode = `
-      @group(0) @binding(0) var inputTexture: ${zeroCopy ? "texture_external" : "texture_2d<f32>"};
-      @group(0) @binding(1) var outputTexture: texture_storage_2d<${getTextureFormat(directOutput)}, write>;
+  const computeShaderCode = `
+      @group(0) @binding(0) var inputTexture: ${
+      zeroCopy ? 'texture_external' : 'texture_2d<f32>'};
+      @group(0) @binding(1) var outputTexture: texture_storage_2d<${
+      getTextureFormat(directOutput)}, write>;
       @group(0) @binding(2) var textureSampler: sampler;
       /*
       struct Uniforms {
