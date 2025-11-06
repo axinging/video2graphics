@@ -11,8 +11,8 @@ let rendererSwitchRequested = false;
 
 function getZeroCopyFromUrl() {
   const params = new URLSearchParams(window.location.search);
-  if (!params.has('zerocopy')) return 1;
-  return params.get('zerocopy') === '1' ? 1 : 0;
+  if (!params.has('zerocopy')) return true;
+  return params.get('zerocopy') === 'true' ? true : false;
 }
 
 async function loadRendererFromUrl() {
