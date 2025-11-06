@@ -9,11 +9,6 @@ let segmenter = null;
 let rendererSwitchRequested = false;
 
 
-function getZeroCopyFromUrl() {
-  const params = new URLSearchParams(window.location.search);
-  if (!params.has('zerocopy')) return true;
-  return params.get('zerocopy') === 'true' ? true : false;
-}
 
 async function loadRendererFromUrl() {
   const params = new URLSearchParams(window.location.search);
@@ -44,15 +39,11 @@ async function initializeBlurRenderer() {
     // const rendererModule = await loadRendererFromUrl();
 
     if (useWebGPU && 'gpu' in navigator) {
-      const zeroCopy = getZeroCopyFromUrl() == 1 ? true : false;
-      const directOutput = true;
-      appBlurRenderer = await rendererModule.createWebGPUBlurRenderer(
-          segmenterFunction, zeroCopy, directOutput, loop);
+      appBlurRenderer = await rendererModule.createWebGPUBlurRenderer(segmenterFunction);
       // appStatus.innerText = 'Renderer: WebGPU';
       console.log('Using WebGPU for blur rendering');
     } else {
-      appBlurRenderer = await rendererModule.createWebGL2BlurRenderer(
-          segmenterFunction, loop);
+      appBlurRenderer = await rendererModule.createWebGL2BlurRenderer(segmenterFunction);
       // appStatus.innerText = 'Renderer: WebGL2';
       console.log('Using WebGL2 for blur rendering');
     }
@@ -190,8 +181,8 @@ let isRunning = false;
 let appReader = null;
 
 // Get DOM elements for app control
-const startButton = document.getElementById('startButton');
-const stopButton = document.getElementById('stopButton');
+// const startButton = document.getElementById('startButton');
+// const stopButton = document.getElementById('stopButton');
 const webgpuRadio = document.getElementById('webgpuRadio');
 const displaySizeSelect = document.getElementById('displaySize');
 const appStatus = document.getElementById('status');
@@ -306,8 +297,8 @@ async function startVideoProcessing() {
     appProcessedVideo.style.display = 'none';
 
     isRunning = true;
-    startButton.style.display = 'none';
-    stopButton.style.display = 'inline-block';
+    // startButton.style.display = 'none';
+    // stopButton.style.display = 'inline-block';
 
     // Now run the video processing
     await initializeBlurRenderer();
@@ -356,13 +347,8 @@ function updateOptionState() {
   directOutputCheckbox.disabled = !isWebGPU;
   directOutputLabel.style.color = isWebGPU ? '' : '#aaa';
 };
-var loop = 4;
 
 async function initializeApp() {
-  const urlParams = new URLSearchParams(window.location.search);
-  const tmp = urlParams.get('loop');
-  loop = tmp == null ? 0 : Number(tmp);  // returns NaN if not a number
-
   // Set initial UI state from URL before doing anything else
   // updateUiFromUrl();
 
@@ -370,9 +356,17 @@ async function initializeApp() {
 
   // Set initial display size
   updateDisplaySize();
-  startButton.addEventListener('click', startVideoProcessing);
-  stopButton.addEventListener('click', stopVideoProcessing);
+  // startButton.addEventListener('click', startVideoProcessing);
+  // stopButton.addEventListener('click', stopVideoProcessing);
 
+  document.addEventListener('keydown', (event) => {
+  if (event.key === 's' || event.key === 'S') {
+    startVideoProcessing();
+  }
+  if (event.key === 'e' || event.key === 'E') {
+    stopVideoProcessing();
+  }
+});
   // await startVideoProcessing()
 }
 

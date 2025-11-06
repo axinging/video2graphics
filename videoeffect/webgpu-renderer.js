@@ -147,13 +147,35 @@ async function renderWithWebGPU(params, videoFrame, resourceCache) {
 
   return processedVideoFrame;
 }
+/*
+function loadConfigFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const wgsx = Number(params.get('wgsx') || '8');
+  const wgsy = Number(params.get('wgsy') || '8');
+  return [wgsx, wgsy];
+}
+
+function getZeroCopyFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  if (!params.has('zerocopy')) return true;
+  return params.get('zerocopy') === 'true' ? true : false;
+}*/
+
+function loadConfigFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const wgsX = Number(params.get('wgsx') || '8');
+  const wgsY = Number(params.get('wgsy') || '8');
+  const zeroCopy = params.has('zerocopy') ? (params.get('zerocopy') === 'true' || params.get('zerocopy') === '1') : true;
+  const directOutput = params.has('directoutput') ? (params.get('directoutput') === 'true' || params.get('directoutput') === '1') : true;
+  return { wgsX: wgsX, wgsY: wgsY, zeroCopy: zeroCopy, directOutput: directOutput };
+}
 
 // WebGPU blur renderer (vertex+fragment shader)
-export async function createWebGPUBlurRenderer(
-    segmenter, zeroCopy, directOutput, loop) {
+export async function createWebGPUBlurRenderer(segmenter) {
+  const config = loadConfigFromUrl();
   console.log(
-      'createWebGPUBlurRenderer zeroCopy: ', zeroCopy,
-      ' directOutput: ', directOutput);
+      'createWebGPUBlurRenderer zeroCopy: ', config.zeroCopy,
+      ' directOutput: ', config.directOutput);
   // Always use full resolution for processing, regardless of display size
   const webgpuCanvas = new OffscreenCanvas(1280, 720);
 
@@ -206,7 +228,7 @@ fn main(@location(0) pos: vec2<f32>, @location(1) uv: vec2<f32>) -> VertexOutput
   // "texture_2d<f32>"}; Fragment shader WGSL
   const fragmentShaderCode = `
 @group(0) @binding(0) var inputTexture: ${
-      zeroCopy ? 'texture_external' : 'texture_2d<f32>'};
+      config.zeroCopy ? 'texture_external' : 'texture_2d<f32>'};
 @group(0) @binding(1) var textureSampler: sampler;
 
 @fragment
@@ -249,8 +271,8 @@ fn main(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
         renderPipeline,
         webgpuCanvas,
         renderSampler,
-        zeroCopy,
-        directOutput,
+        zeroCopy: config.zeroCopy,
+        directOutput: config.directOutput,
         segmenter
       };
       try {
