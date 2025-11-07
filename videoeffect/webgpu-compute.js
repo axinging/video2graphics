@@ -33,11 +33,12 @@ function getOrCreateTexture(device, cache, key, size, directOutput, usage) {
   return texture;
 }
 
-async function renderWithWebGPU(params, videoFrame, resourceCache, wgs) {
+async function renderWithWebGPU(params, videoFrame, resourceCache) {
   const device = params.device;
   const webgpuCanvas = params.webgpuCanvas;
   const width = params.webgpuCanvas.width;
   const height = params.webgpuCanvas.height;
+  const wgs = params.wgs;
 
   // Import external texture.
   let sourceTexture;
@@ -149,6 +150,9 @@ async function renderWithWebGPU(params, videoFrame, resourceCache, wgs) {
 // WebGPU blur renderer
 export async function createWebGPUBlurRenderer(
   segmenter, config) {
+  if(config.blur) {
+    throw new Error('WebGPU-compute.js does not support config.blur');
+  }
   console.log(
     'createWebGPUBlurRenderer zeroCopy: ', config.zeroCopy,
     ' directOutput: ', config.directOutput, ' bilinearFiltering', config.bilinearFiltering);
@@ -208,85 +212,9 @@ export async function createWebGPUBlurRenderer(
         textureStore(outputTexture, coord, originalColor);
       }
     `;
-  const tileDim = config.wgs[0] * 4; // Assuming workgroup_size_y is 4
-  const filterSize = 15; // Example filter size for blur
-  const blockDim = tileDim - filterSize;
-  const filterDim = filterSize + 1;
-  const computeShaderCodeTile = `
-// @group(0) @binding(1) var<uniform> params : Params;
-@group(0) @binding(0) var inputTexure : ${config.zeroCopy ? 'texture_external' : 'texture_2d<f32>'};
-@group(0) @binding(1) var outputTexture : texture_storage_2d<${getTextureFormat(config.directOutput)}, write>;
-@group(0) @binding(2) var textureSampler : sampler;
-/*
-struct Flip {
-  value : u32,
-}
-@group(1) @binding(3) var<uniform> flip : Flip;
-*/
-
-var<workgroup> tile : array<array<vec3f, 128>, 4>;
-
-@compute @workgroup_size(${config.wgs[0]}, ${config.wgs[1]}, 1)
-fn main(
-  @builtin(workgroup_id) WorkGroupID : vec3u,
-  @builtin(local_invocation_id) LocalInvocationID : vec3u
-) {
-  let filterOffset = (${filterDim} - 1) / 2;
-  // let dims = vec2i(textureDimensions(inputTexure, 0));
-  let dims = vec2i(textureDimensions(inputTexure));
-  let baseIndex = vec2i(WorkGroupID.xy * vec2(${blockDim}, 4) +
-                            LocalInvocationID.xy * vec2(4, 1))
-                  - vec2(filterOffset, 0);
-
-  for (var r = 0; r < 4; r++) {
-    for (var c = 0; c < 4; c++) {
-      var loadIndex = baseIndex + vec2(c, r);
-      // if (flip.value != 0u) {
-      //  loadIndex = loadIndex.yx;
-      // }
-      /*
-      tile[r][4 * LocalInvocationID.x + u32(c)] = textureSampleLevel(
-        inputTexure,
-        textureSampler,
-        (vec2f(loadIndex) + vec2f(0.5, 0.5)) / vec2f(dims),
-        0.0
-      ).rgb;
-      */
-      tile[r][4 * LocalInvocationID.x + u32(c)] = textureSampleBaseClampToEdge(
-        inputTexure,
-        textureSampler,
-        (vec2f(loadIndex) + vec2f(0.5, 0.5)) / vec2f(dims)
-      ).rgb;
-    }
-  }
-
-  workgroupBarrier();
-
-  for (var r = 0; r < 4; r++) {
-    for (var c = 0; c < 4; c++) {
-      var writeIndex = baseIndex + vec2(c, r);
-      //if (flip.value != 0) {
-      //  writeIndex = writeIndex.yx;
-      //}
-
-      let center = i32(4 * LocalInvocationID.x) + c;
-      if (center >= filterOffset &&
-          center < 128 - filterOffset &&
-          all(writeIndex < dims)) {
-        var acc = vec3(0.0, 0.0, 0.0);
-        for (var f = 0; f < ${filterDim}; f++) {
-          var i = center + f - filterOffset;
-          acc = acc + (1.0 / f32(${filterDim})) * tile[r][i];
-        }
-        textureStore(outputTexture, writeIndex, vec4(acc, 1.0));
-      }
-    }
-  }
-}
-`;
 
   const computeShader = device.createShaderModule({
-    code: config.blur? computeShaderCodeTile: computeShaderCode,
+    code: computeShaderCode,
   });
 
   const computePipeline = device.createComputePipeline({
@@ -301,14 +229,6 @@ fn main(
     magFilter: 'linear',
     minFilter: 'linear',
   });
-  /*
-  const uniformBuffer = device.createBuffer({
-    // resolution: vec2<f32>, blurAmount: f32.
-    // vec2 is 8 bytes, f32 is 4. Total 12. Pad to 16 for alignment.
-    size: 16,
-    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-  });
-  */
 
   // Create a simple render pipeline to copy the compute shader's output (RGBA)
   // to the canvas, which might have a different format (e.g., BGRA).
@@ -330,13 +250,11 @@ fn main(
         blurSampler,
         // uniformBuffer,
         renderSampler,
-        zeroCopy: config.zeroCopy,
-        directOutput: config.directOutput,
-        blur: config.blur,
+        ...config,
         segmenter
       };
       try {
-        return await renderWithWebGPU(params, videoFrame, resourceCache, config.wgs);
+        return await renderWithWebGPU(params, videoFrame, resourceCache);
       } catch (error) {
         console.warn('WebGPU rendering failed:', error);
       }

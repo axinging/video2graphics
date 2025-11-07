@@ -18,8 +18,8 @@ function getOrCreateTexture(device, cache, key, size, directOutput, usage) {
   let texture = cache[cacheKey];
   if (!texture || texture.width !== width || texture.height !== height) {
     console.log(
-        'Creating new texture for ', cacheKey, ' with format ', format,
-        ' and usage ', usage);
+      'Creating new texture for ', cacheKey, ' with format ', format,
+      ' and usage ', usage);
     if (texture) {
       texture.destroy();
     }
@@ -56,8 +56,8 @@ const vertexData = new Float32Array([
 const vertexBufferLayout = {
   arrayStride: 4 * 4,
   attributes: [
-    {shaderLocation: 0, offset: 0, format: 'float32x2'},      // pos
-    {shaderLocation: 1, offset: 2 * 4, format: 'float32x2'},  // uv
+    { shaderLocation: 0, offset: 0, format: 'float32x2' },      // pos
+    { shaderLocation: 1, offset: 2 * 4, format: 'float32x2' },  // uv
   ],
 };
 
@@ -76,13 +76,13 @@ async function renderWithWebGPU(params, videoFrame, resourceCache) {
     });
   } else {
     sourceTexture = getOrCreateTexture(
-        device, resourceCache, 'sourceTexture', [width, height, 1],
-        params.directOutput,
-        GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST |
-            GPUTextureUsage.RENDER_ATTACHMENT);
+      device, resourceCache, 'sourceTexture', [width, height, 1],
+      params.directOutput,
+      GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST |
+      GPUTextureUsage.RENDER_ATTACHMENT);
 
     device.queue.copyExternalImageToTexture(
-        {source: videoFrame}, {texture: sourceTexture}, [width, height]);
+      { source: videoFrame }, { texture: sourceTexture }, [width, height]);
   }
 
   // Update canvas size only if video resolution actually changed
@@ -95,6 +95,11 @@ async function renderWithWebGPU(params, videoFrame, resourceCache) {
       alphaMode: 'premultiplied',
       usage: GPUTextureUsage.RENDER_ATTACHMENT,
     });
+  }
+  if (params.uniformBuffer) {
+    const uniformData =
+      new Float32Array([width, height, 6.0]);  // resolution, blurAmount
+    device.queue.writeBuffer(params.uniformBuffer, 0, uniformData);
   }
 
   let vertexBuffer = resourceCache.vertexBuffer;
@@ -109,14 +114,24 @@ async function renderWithWebGPU(params, videoFrame, resourceCache) {
     resourceCache.vertexBuffer = vertexBuffer;
   }
 
-  const bindGroup = device.createBindGroup({
+  const bindGroup = params.blur ? device.createBindGroup({
     layout: params.renderPipeline.getBindGroupLayout(0),
     entries: [
       {
         binding: 0,
         resource: params.zeroCopy ? sourceTexture : sourceTexture.createView()
       },
-      {binding: 1, resource: params.renderSampler},
+      { binding: 1, resource: params.renderSampler },
+      { binding: 2, resource: { buffer: params.uniformBuffer } },
+    ],
+  }) : device.createBindGroup({
+    layout: params.renderPipeline.getBindGroupLayout(0),
+    entries: [
+      {
+        binding: 0,
+        resource: params.zeroCopy ? sourceTexture : sourceTexture.createView()
+      },
+      { binding: 1, resource: params.renderSampler }
     ],
   });
 
@@ -128,7 +143,7 @@ async function renderWithWebGPU(params, videoFrame, resourceCache) {
       view: textureView,
       loadOp: 'clear',
       storeOp: 'store',
-      clearValue: {r: 0, g: 0, b: 0, a: 1},
+      clearValue: { r: 0, g: 0, b: 0, a: 1 },
     }],
   });
 
@@ -142,8 +157,8 @@ async function renderWithWebGPU(params, videoFrame, resourceCache) {
 
   // Create a new VideoFrame from the processed WebGPU canvas
   const processedVideoFrame = new VideoFrame(
-      webgpuCanvas,
-      {timestamp: videoFrame.timestamp, duration: videoFrame.duration});
+    webgpuCanvas,
+    { timestamp: videoFrame.timestamp, duration: videoFrame.duration });
 
   return processedVideoFrame;
 }
@@ -151,8 +166,8 @@ async function renderWithWebGPU(params, videoFrame, resourceCache) {
 // WebGPU blur renderer (vertex+fragment shader)
 export async function createWebGPUBlurRenderer(segmenter, config) {
   console.log(
-      'createWebGPUBlurRenderer zeroCopy: ', config.zeroCopy,
-      ' directOutput: ', config.directOutput, ' bilinearFiltering', config.bilinearFiltering);
+    'createWebGPUBlurRenderer zeroCopy: ', config.zeroCopy,
+    ' directOutput: ', config.directOutput, ' bilinearFiltering', config.bilinearFiltering);
   // Always use full resolution for processing, regardless of display size
   const webgpuCanvas = new OffscreenCanvas(1280, 720);
 
@@ -170,7 +185,7 @@ export async function createWebGPUBlurRenderer(segmenter, config) {
     console.log('BGRA8UNORM-STORAGE not supported');
   }
   const device =
-      await adapter.requestDevice({requiredFeatures: ['bgra8unorm-storage']});
+    await adapter.requestDevice({ requiredFeatures: ['bgra8unorm-storage'] });
   const context = webgpuCanvas.getContext('webgpu');
 
   if (!context) {
@@ -202,45 +217,39 @@ fn main(@location(0) pos: vec2<f32>, @location(1) uv: vec2<f32>) -> VertexOutput
 
   // Fragment shader WGSL
   var fragmentShaderCode;
-  if (config.bilinearFiltering) {
-  fragmentShaderCode = `
-@group(0) @binding(0) var inputTexture: ${
-      config.zeroCopy ? 'texture_external' : 'texture_2d<f32>'};
+  if (config.blur) {
+    const blurRadius = config.blurRadius || 4;
+    fragmentShaderCode = `
+@group(0) @binding(0) var inputTexure: ${config.zeroCopy ? 'texture_external' : 'texture_2d<f32>'};
 @group(0) @binding(1) var textureSampler: sampler;
+
+struct Uniforms {
+    resolution: vec2<f32>,
+    blurAmount: f32,
+};
+@group(0) @binding(2) var<uniform> uniforms: Uniforms;
 
 @fragment
 fn main(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
-  let texelSize = 1.0 / vec2<f32>(textureDimensions(inputTexture));
-  let uv_center = uv + 0.5 * texelSize.x * vec2<f32>(1.0, 0.0);
-  let color = textureSampleBaseClampToEdge(inputTexture, textureSampler, uv_center);
-  return color;
-}
-`; 
-  } else  if(config.blur) {
-  const blurRadius = config.blurRadius || 4;
-  fragmentShaderCode = `
-    @group(0) @binding(0) var inputTexure: ${config.zeroCopy ? 'texture_external' : 'texture_2d<f32>'};
-    @group(0) @binding(1) var textureSampler: sampler;
-
-    @fragment
-    fn main(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
-      let dims = vec2f(textureDimensions(inputTexure));
-      var color = vec3f(0.0, 0.0, 0.0);
-      let samples = ${(2 * blurRadius + 1) * (2 * blurRadius + 1)};
-      for (var dx = -${blurRadius}; dx <= ${blurRadius}; dx++) {
-        for (var dy = -${blurRadius}; dy <= ${blurRadius}; dy++) {
-          let offset = vec2f(f32(dx), f32(dy)) / dims;
-          color += textureSampleBaseClampToEdge(inputTexure, textureSampler, uv + offset).rgb;
-        }
-      }
-      return vec4f(color / f32(samples), 1.0);
+  let dims = vec2f(textureDimensions(inputTexure));
+  var color = vec3f(0.0, 0.0, 0.0);
+  var total = 0.0;
+  let blurAmount = 6.0;
+  for (var dx = -4; dx <= 4; dx++) {
+    for (var dy = -4; dy <= 4; dy++) {
+      let offset = vec2f(f32(dx), f32(dy)) * blurAmount / dims;
+      let weight = 1.0 / (1.0 + length(vec2f(f32(dx), f32(dy))));
+      color += textureSampleBaseClampToEdge(inputTexure, textureSampler, uv + offset).rgb * weight;
+      total += weight;
     }
+  }
+  return vec4f(color / total, 1.0);
+}
   `;
   } else {
-   fragmentShaderCode =
-`
-@group(0) @binding(0) var inputTexture: ${
-      config.zeroCopy ? 'texture_external' : 'texture_2d<f32>'};
+    fragmentShaderCode =
+      `
+@group(0) @binding(0) var inputTexture: ${config.zeroCopy ? 'texture_external' : 'texture_2d<f32>'};
 @group(0) @binding(1) var textureSampler: sampler;
 
 @fragment
@@ -251,13 +260,20 @@ fn main(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
 `;
   }
 
-  const vertexModule = device.createShaderModule({code: vertexShaderCode});
-  const fragmentModule = device.createShaderModule({code: fragmentShaderCode});
+  const vertexModule = device.createShaderModule({ code: vertexShaderCode });
+  const fragmentModule = device.createShaderModule({ code: fragmentShaderCode });
 
   const renderSampler = device.createSampler({
     magFilter: 'linear',
     minFilter: 'linear',
   });
+
+  const uniformBuffer = config.blur ? device.createBuffer({
+    // resolution: vec2<f32>, blurAmount: f32.
+    // vec2 is 8 bytes, f32 is 4. Total 12. Pad to 16 for alignment.
+    size: 16,
+    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+  }) : null;
 
   const renderPipeline = device.createRenderPipeline({
     layout: 'auto',
@@ -269,9 +285,9 @@ fn main(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
     fragment: {
       module: fragmentModule,
       entryPoint: 'main',
-      targets: [{format: navigator.gpu.getPreferredCanvasFormat()}],
+      targets: [{ format: navigator.gpu.getPreferredCanvasFormat() }],
     },
-    primitive: {topology: 'triangle-strip'},
+    primitive: { topology: 'triangle-strip' },
   });
 
   const resourceCache = {};
@@ -284,6 +300,7 @@ fn main(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
         renderPipeline,
         webgpuCanvas,
         renderSampler,
+        uniformBuffer,
         zeroCopy: config.zeroCopy,
         directOutput: config.directOutput,
         segmenter

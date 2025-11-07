@@ -10,23 +10,30 @@ let rendererSwitchRequested = false;
 
 
 
-async function loadRendererFromUrl() {
+async function loadRendererFromUrl(blur) {
   const params = new URLSearchParams(window.location.search);
-  const rendererType = params.get('renderer') || 'webgpucompute';
+  const rendererType = params.get('renderer') || 'webgpu-compute';
   const wgsx = Number(params.get('wgsx') || '8');
   const wgsy = Number(params.get('wgsy') || '8');
 
   let rendererModule;
-  if (rendererType === 'webgpucompute') {
-    rendererModule = await import('./webgpu-renderer-compute.js');
-  } else if (rendererType === 'webgpugraphics') {
-    rendererModule = await import('./webgpu-renderer.js');
+  if (rendererType === 'webgpu-compute' && !blur) {
+    rendererModule = await import('./webgpu-compute.js');
+  } else if (rendererType === 'webgpu-compute' && blur) {
+    rendererModule = await import('./webgpu-compute-blur.js');
+  } else if (rendererType === 'webgpu-graphics'&& !blur) {
+    rendererModule = await import('./webgpu-graphics.js');
+  }  else if (rendererType === 'webgpu-graphics'&& blur) {
+    rendererModule = await import('./webgpu-graphics.js');
+  } else if (rendererType === 'webgl-graphics' && !blur) {
+    rendererModule = await import('./webgl-graphics.js');
+  } else if (rendererType === 'webgl-graphics'&& blur) {
+    rendererModule = await import('./webgl-graphics-blur.js');
   } else {
-    rendererModule = await import('./webgl-renderer.js');
+    throw new Error(`Unknown renderer type: ${rendererType}`);
   }
   return {rendererModule, rendererType, wgsx, wgsy};
 }
-
 
 function loadConfigFromUrl() {
   const params = new URLSearchParams(window.location.search);
@@ -42,11 +49,9 @@ function loadConfigFromUrl() {
 
 // Initialize blur renderer based on radio buttons
 async function initializeBlurRenderer() {
-  const {rendererModule, rendererType} = await loadRendererFromUrl();
   const config = loadConfigFromUrl();
-  const useWebGPU =
-      (rendererType === 'webgpucompute' || rendererType === 'webgpugraphics');
-  const segmenterFunction = null
+  const {rendererModule, rendererType} = await loadRendererFromUrl(config.blur);
+  const useWebGPU = rendererType.startsWith('webgpu'); const segmenterFunction = null
 
   try {
     // const rendererModule = await loadRendererFromUrl();
