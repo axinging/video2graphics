@@ -140,11 +140,15 @@ async function renderWithWebGPU(params, videoFrame, resourceCache) {
   device.queue.submit([commandEncoder.finish()]);
 
   // Create a new VideoFrame from the processed WebGPU canvas
-  const processedVideoFrame = new VideoFrame(
-    params.webgpuCanvas,
-    { timestamp: videoFrame.timestamp, duration: videoFrame.duration });
 
-  return processedVideoFrame;
+  if(config.present) {
+    const processedVideoFrame = new VideoFrame(
+      params.webgpuCanvas,
+      { timestamp: videoFrame.timestamp, duration: videoFrame.duration });
+    return processedVideoFrame;
+  } else {
+    return null;
+  }
 }
 
 // WebGPU blur renderer
@@ -163,6 +167,9 @@ export async function createWebGPUBlurRenderer(
   if (!adapter) {
     throw new Error('WebGPU adapter not available');
   }
+  // const info = await adapter.requestAdapterInfo();
+  // console.log(info);
+  // console.log(adapter);
 
   // Ensure we're compatible with directOutput
   console.log('Adapter features:');

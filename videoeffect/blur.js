@@ -10,12 +10,7 @@ let rendererSwitchRequested = false;
 
 
 
-async function loadRendererFromUrl(blur) {
-  const params = new URLSearchParams(window.location.search);
-  const rendererType = params.get('renderer') || 'webgpu-compute';
-  const wgsx = Number(params.get('wgsx') || '8');
-  const wgsy = Number(params.get('wgsy') || '8');
-
+async function loadRenderer(rendererType, blur) {
   let rendererModule;
   if (rendererType === 'webgpu-compute' && !blur) {
     rendererModule = await import('./webgpu-compute.js');
@@ -32,26 +27,32 @@ async function loadRendererFromUrl(blur) {
   } else {
     throw new Error(`Unknown renderer type: ${rendererType}`);
   }
-  return {rendererModule, rendererType, wgsx, wgsy};
+  return rendererModule;
 }
 
 function loadConfigFromUrl() {
   const params = new URLSearchParams(window.location.search);
+  const renderer = params.get('renderer') || 'webgpu-compute';
+  const autostart = params.has('autostart') ? (params.get('autostart') === 'true' || params.get('autostart') === '1') : true;
   const wgsX = Number(params.get('wgsx') || '8');
   const wgsY = Number(params.get('wgsy') || '8');
   const zeroCopy = params.has('zerocopy') ? (params.get('zerocopy') === 'true' || params.get('zerocopy') === '1') : true;
   const directOutput = params.has('directoutput') ? (params.get('directoutput') === 'true' || params.get('directoutput') === '1') : true;
   const bilinearFiltering = params.has('bilinearfiltering') ? (params.get('bilinearfiltering') === 'true' || params.get('bilinearfiltering') === '1') : false;
   const blur = params.has('blur') ? (params.get('blur') === 'true' || params.get('blur') === '1') : false;
+  const present = params.has('present') ? (params.get('present') === 'true' || params.get('present') === '1') : true;
+  
   // bilinearFiltering？
-  return { wgs: [wgsX, wgsY], zeroCopy: zeroCopy, directOutput: directOutput, bilinearFiltering: bilinearFiltering, blur: blur };
+  return { renderer, autostart,present, wgs: [wgsX, wgsY], zeroCopy: zeroCopy, directOutput: directOutput, bilinearFiltering: bilinearFiltering, blur: blur };
 }
+
+let config = null;
 
 // Initialize blur renderer based on radio buttons
 async function initializeBlurRenderer() {
-  const config = loadConfigFromUrl();
-  const {rendererModule, rendererType} = await loadRendererFromUrl(config.blur);
-  const useWebGPU = rendererType.startsWith('webgpu'); const segmenterFunction = null
+  if (config == null)  config = loadConfigFromUrl();
+  const rendererModule = await loadRenderer(config.renderer, config.blur);
+  const useWebGPU = config.renderer.startsWith('webgpu'); const segmenterFunction = null
 
   try {
     // const rendererModule = await loadRendererFromUrl();
@@ -371,6 +372,10 @@ function updateOptionState() {
 async function initializeApp() {
   // Set initial UI state from URL before doing anything else
   // updateUiFromUrl();
+  if (config == null) {
+    config = loadConfigFromUrl();
+  }
+  const autoStart = config.autostart; //params.get('autostart') === 'true';
 
   initializeCompatibilityInfo();
 
@@ -380,14 +385,16 @@ async function initializeApp() {
   // stopButton.addEventListener('click', stopVideoProcessing);
 
   document.addEventListener('keydown', (event) => {
-  if (event.key === 's' || event.key === 'S') {
-    startVideoProcessing();
+    if (event.key === 's' || event.key === 'S') {
+      startVideoProcessing();
+    }
+    if (event.key === 'e' || event.key === 'E') {
+      stopVideoProcessing();
+    }
+  });
+  if(autoStart) {
+    await startVideoProcessing();
   }
-  if (event.key === 'e' || event.key === 'E') {
-    stopVideoProcessing();
-  }
-});
-  // await startVideoProcessing()
 }
 
 // Initialize the app

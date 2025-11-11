@@ -88,7 +88,7 @@ function renderWithWebGL2(gl, program, videoFrame, resources) {
 }
 
 // WebGL2 blur renderer
-export function createWebGL2BlurRenderer(segmenterFunction, loop) {
+export function createWebGL2BlurRenderer(segmenterFunction, config) {
   // Create a separate canvas for WebGL2 processing at full resolution
   const webglCanvas = document.createElement('canvas');
   // Always use full video resolution for processing, regardless of display size
@@ -192,12 +192,16 @@ export function createWebGL2BlurRenderer(segmenterFunction, loop) {
       });
 
       // Create a new VideoFrame from the processed WebGL canvas
-      const processedFrame = new VideoFrame(webglCanvas, {
-        timestamp: videoFrame.timestamp,
-        duration: videoFrame.duration
-      });
+      if (config.present) {
+        const processedFrame = new VideoFrame(webglCanvas, {
+          timestamp: videoFrame.timestamp,
+          duration: videoFrame.duration
+        });
 
-      return processedFrame;
+        return processedFrame;
+    } else {
+      return null;
     }
+  }
   };
 }

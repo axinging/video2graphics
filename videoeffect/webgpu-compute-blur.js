@@ -250,12 +250,17 @@ async function renderWithWebGPU(params, videoFrame, resourceCache) {
   device.queue.submit([commandEncoder.finish()]);
 
   // Create a new VideoFrame from the processed WebGPU canvas
-  const processedVideoFrame = new VideoFrame(params.webgpuCanvas, {
-    timestamp: videoFrame.timestamp,
-    duration: videoFrame.duration
-  });
+  if(config.present) {
+    const processedVideoFrame = new VideoFrame(params.webgpuCanvas, {
+      timestamp: videoFrame.timestamp,
+      duration: videoFrame.duration
+    });
 
-  return processedVideoFrame;
+    return processedVideoFrame;
+  } else {
+    return null;
+  }
+
 }
 
 // WebGPU blur renderer
