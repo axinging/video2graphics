@@ -1,20 +1,8 @@
-function GetVideoSource(codec, videoSize = false) {
-  switch (codec) {
-    case "vp9":
-    default:
-      // Add FPS!
-      if (videoSize == "180p") {
-        return "./320x180.webm";
-      } else if (videoSize == "360p") {
-        return "./640x360.webm";
-      } else if (videoSize == "720p") {
-        return "./1280_720_vp9_30fps.webm";
-      } else if (videoSize == "1080p") {
-        return "./1920x1080.webm";
-      } else {
-        return "./teddy3_vp9_320x180_30fps.webm";
-      }
-  }
+function GetVideoSource(videoInfo) {
+  const fps = videoInfo.fps;
+  const videoSize = videoInfo.size;
+  const codec = videoInfo.codec;
+  return `./${videoSize}_${codec}_${fps}fps.webm`;
 }
 
 function getMedianValue(array) {
@@ -107,6 +95,68 @@ async function processOneFrame(videoFrame) {
     console.error('Error during frame processing in processOneFrame:', error);
     return null;
   }
+}
+
+let lastProcessedTime = 0;
+
+// Main processing loop for video element
+async function run20fps() {
+  appStartRun = performance.now();
+  appCount = 0;
+  appSegmentTimes.length = 0;
+
+  let frameCount = 0;
+  let lastFpsTime = performance.now();
+  let actualFps = 0;
+
+  const trackGenerator = new MediaStreamTrackGenerator({kind: 'video'});
+  const writer = trackGenerator.writable.getWriter();
+  const outputStream = new MediaStream([trackGenerator]);
+  if (outputStream && appProcessedVideo) {
+    appProcessedVideo.srcObject = outputStream;
+  }
+
+  // Limit FPS to 20
+  async function processFrames(now, metadata) {
+    if (!isRunning || appVideo.ended) {
+      writer.close();
+      return;
+    }
+
+    // Only process if enough time has passed (50ms for ~20fps)
+    if (now - lastProcessedTime < 50) {
+      appVideo.requestVideoFrameCallback(processFrames);
+      return;
+    }
+    lastProcessedTime = now;
+
+    const videoFrame = new VideoFrame(appVideo, {timestamp: metadata?.mediaTime ? metadata.mediaTime * 1e6 : performance.now() * 1000});
+    frameCount++;
+    const currentTime = performance.now();
+    const deltaTime = currentTime - lastFpsTime;
+    if (deltaTime >= 1000) {
+      actualFps = (frameCount * 1000) / deltaTime;
+      appFpsDisplay.textContent = `FPS: ${actualFps.toFixed(1)}`;
+      frameCount = 0;
+      lastFpsTime = currentTime;
+    }
+
+    const processedFrame = await processOneFrame(videoFrame);
+
+    if (processedFrame) {
+      try {
+        await writer.write(processedFrame);
+      } catch (e) {
+        console.error('Error writing frame to generator', e);
+      }
+      processedFrame.close();
+    }
+    videoFrame.close();
+
+    appVideo.requestVideoFrameCallback(processFrames);
+  }
+
+  appVideo.requestVideoFrameCallback(processFrames);
 }
 
 // Main processing loop for video element
@@ -218,12 +268,22 @@ function initializeCompatibilityInfo() {
   }
 }
 
+function loadFpsFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const fps = Number(params.get('fps') || '10');
+  const size = params.get('size') || '1280x720';
+  const codec = params.get('codec') || 'vp9';
+  return {fps, size, codec};
+}
+
+
 // Start video processing from a video file
 export async function startVideoProcessing() {
   if (isRunning) return;
   try {
     // Get video source URL using GetVideoSource
-    const videoSrc = GetVideoSource("vp9", "720p"); // You can change codec and size as needed
+    const videoInfo = loadFpsFromUrl();
+    const videoSrc = GetVideoSource(videoInfo); // You can change codec and size as needed
     appVideo.src = videoSrc;
     appVideo.loop = true;
     appVideo.load();
