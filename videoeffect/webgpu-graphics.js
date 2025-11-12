@@ -157,7 +157,7 @@ async function renderWithWebGPU(params, videoFrame, resourceCache) {
 
   // Create a new VideoFrame from the processed WebGPU canvas
 
-  if(config.present) {
+  if(params.present) {
     const processedVideoFrame = new VideoFrame(
       webgpuCanvas,
       { timestamp: videoFrame.timestamp, duration: videoFrame.duration });
@@ -169,10 +169,10 @@ async function renderWithWebGPU(params, videoFrame, resourceCache) {
 }
 
 // WebGPU blur renderer (vertex+fragment shader)
-export async function createWebGPUBlurRenderer(segmenter, config) {
+export async function createWebGPUBlurRenderer(segmenter, params) {
   console.log(
-    'createWebGPUBlurRenderer zeroCopy: ', config.zeroCopy,
-    ' directOutput: ', config.directOutput, ' bilinearFiltering', config.bilinearFiltering);
+    'createWebGPUBlurRenderer zeroCopy: ', params.zeroCopy,
+    ' directOutput: ', params.directOutput, ' bilinearFiltering', params.bilinearFiltering);
   // Always use full resolution for processing, regardless of display size
   const webgpuCanvas = new OffscreenCanvas(1280, 720);
 
@@ -222,10 +222,10 @@ fn main(@location(0) pos: vec2<f32>, @location(1) uv: vec2<f32>) -> VertexOutput
 
   // Fragment shader WGSL
   var fragmentShaderCode;
-  if (config.blur) {
-    const blurRadius = config.blurRadius || 4;
+  if (params.blur) {
+    const blurRadius = params.blurRadius || 4;
     fragmentShaderCode = `
-@group(0) @binding(0) var inputTexure: ${config.zeroCopy ? 'texture_external' : 'texture_2d<f32>'};
+@group(0) @binding(0) var inputTexure: ${params.zeroCopy ? 'texture_external' : 'texture_2d<f32>'};
 @group(0) @binding(1) var textureSampler: sampler;
 
 struct Uniforms {
@@ -254,7 +254,7 @@ fn main(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
   } else {
     fragmentShaderCode =
       `
-@group(0) @binding(0) var inputTexture: ${config.zeroCopy ? 'texture_external' : 'texture_2d<f32>'};
+@group(0) @binding(0) var inputTexture: ${params.zeroCopy ? 'texture_external' : 'texture_2d<f32>'};
 @group(0) @binding(1) var textureSampler: sampler;
 
 @fragment
@@ -273,7 +273,7 @@ fn main(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
     minFilter: 'linear',
   });
 
-  const uniformBuffer = config.blur ? device.createBuffer({
+  const uniformBuffer = params.blur ? device.createBuffer({
     // resolution: vec2<f32>, blurAmount: f32.
     // vec2 is 8 bytes, f32 is 4. Total 12. Pad to 16 for alignment.
     size: 16,
@@ -299,15 +299,14 @@ fn main(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
 
   return {
     render: async (videoFrame) => {
-      const params = {
+      params = {
         device,
         context,
         renderPipeline,
         webgpuCanvas,
         renderSampler,
         uniformBuffer,
-        zeroCopy: config.zeroCopy,
-        directOutput: config.directOutput,
+        ...params,
         segmenter
       };
       try {

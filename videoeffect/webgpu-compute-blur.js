@@ -250,7 +250,7 @@ async function renderWithWebGPU(params, videoFrame, resourceCache) {
   device.queue.submit([commandEncoder.finish()]);
 
   // Create a new VideoFrame from the processed WebGPU canvas
-  if(config.present) {
+  if(params.present) {
     const processedVideoFrame = new VideoFrame(params.webgpuCanvas, {
       timestamp: videoFrame.timestamp,
       duration: videoFrame.duration
@@ -264,9 +264,9 @@ async function renderWithWebGPU(params, videoFrame, resourceCache) {
 }
 
 // WebGPU blur renderer
-export async function createWebGPUBlurRenderer(segmenter, config) {
-  const zeroCopy = config.zeroCopy || false;
-  const directOutput = config.directOutput || true;
+export async function createWebGPUBlurRenderer(segmenter, params) {
+  const zeroCopy = params.zeroCopy || false;
+  const directOutput = params.directOutput || true;
   console.log("createWebGPUBlurRenderer zeroCopy: ", zeroCopy, " directOutput: ", directOutput);
   // Always use full resolution for processing, regardless of display size
   const webgpuCanvas = new OffscreenCanvas(1280, 720);
@@ -538,7 +538,7 @@ export async function createWebGPUBlurRenderer(segmenter, config) {
 
   return {
     render: async (videoFrame) => {
-      const params = {
+      params = {
         device,
         context,
         computePipeline,
@@ -552,7 +552,7 @@ export async function createWebGPUBlurRenderer(segmenter, config) {
         downscalePipeline: null,
         downscaleSampler: null,
         renderSampler,
-        ...config,
+        ...params,
         segmenter
       };
       try {

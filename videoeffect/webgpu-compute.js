@@ -141,7 +141,7 @@ async function renderWithWebGPU(params, videoFrame, resourceCache) {
 
   // Create a new VideoFrame from the processed WebGPU canvas
 
-  if(config.present) {
+  if(params.present) {
     const processedVideoFrame = new VideoFrame(
       params.webgpuCanvas,
       { timestamp: videoFrame.timestamp, duration: videoFrame.duration });
@@ -153,13 +153,13 @@ async function renderWithWebGPU(params, videoFrame, resourceCache) {
 
 // WebGPU blur renderer
 export async function createWebGPUBlurRenderer(
-  segmenter, config) {
-  if(config.blur) {
-    throw new Error('WebGPU-compute.js does not support config.blur');
+  segmenter, params) {
+  if(params.blur) {
+    throw new Error('WebGPU-compute.js does not support params.blur');
   }
   console.log(
-    'createWebGPUBlurRenderer zeroCopy: ', config.zeroCopy,
-    ' directOutput: ', config.directOutput, ' bilinearFiltering', config.bilinearFiltering);
+    'createWebGPUBlurRenderer zeroCopy: ', params.zeroCopy,
+    ' directOutput: ', params.directOutput, ' bilinearFiltering', params.bilinearFiltering);
   // Always use full resolution for processing, regardless of display size
   const webgpuCanvas = new OffscreenCanvas(1280, 720);
 
@@ -192,18 +192,18 @@ export async function createWebGPUBlurRenderer(
     format: navigator.gpu.getPreferredCanvasFormat(),
     alphaMode: 'premultiplied',
     usage: GPUTextureUsage.RENDER_ATTACHMENT |
-      (config.directOutput ?
+      (params.directOutput ?
         GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.COPY_DST :
         0),
   });
 
   // WebGPU compute shader for blur effect
   const computeShaderCode = `
-      @group(0) @binding(0) var inputTexureture: ${config.zeroCopy ? 'texture_external' : 'texture_2d<f32>'};
-      @group(0) @binding(1) var outputTexture: texture_storage_2d<${getTextureFormat(config.directOutput)}, write>;
+      @group(0) @binding(0) var inputTexureture: ${params.zeroCopy ? 'texture_external' : 'texture_2d<f32>'};
+      @group(0) @binding(1) var outputTexture: texture_storage_2d<${getTextureFormat(params.directOutput)}, write>;
       @group(0) @binding(2) var textureSampler: sampler;
       
-      @compute @workgroup_size(${config.wgs[0]}, ${config.wgs[1]})
+      @compute @workgroup_size(${params.wgs[0]}, ${params.wgs[1]})
       fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         let inputDims = textureDimensions(inputTexureture);
         
@@ -249,7 +249,7 @@ export async function createWebGPUBlurRenderer(
 
   return {
     render: async (videoFrame) => {
-      const params = {
+      params = {
         device,
         context,
         computePipeline,
@@ -257,7 +257,7 @@ export async function createWebGPUBlurRenderer(
         blurSampler,
         // uniformBuffer,
         renderSampler,
-        ...config,
+        ...params,
         segmenter
       };
       try {
