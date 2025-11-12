@@ -268,6 +268,9 @@ export async function createWebGPUBlurRenderer(segmenter, params) {
   const zeroCopy = params.zeroCopy || false;
   const directOutput = params.directOutput || true;
   console.log("createWebGPUBlurRenderer zeroCopy: ", zeroCopy, " directOutput: ", directOutput);
+  if(params.directOutput) {
+    throw new Error('directOutput: textureSampleBaseClampToEdge doesnot support rgba8unorm ');
+  }
   // Always use full resolution for processing, regardless of display size
   const webgpuCanvas = new OffscreenCanvas(1280, 720);
 
@@ -332,66 +335,6 @@ export async function createWebGPUBlurRenderer(segmenter, params) {
     minFilter: 'linear',
   });*/
   // --- Slut på nedskalningsresurser ---
-
-  // WebGPU compute shader for blur effect
-  const computeShaderCode = `
-      @group(0) @binding(0) var inputTexture: ${zeroCopy ? "texture_external" : "texture_2d<f32>"};
-      // @group(0) @binding(1) var maskTexture: texture_2d<f32>;
-      @group(0) @binding(1) var outputTexture: texture_storage_2d<${getTextureFormat(directOutput)}, write>;
-      @group(0) @binding(2) var textureSampler: sampler;
-      
-      struct Uniforms {
-        resolution: vec2<f32>,
-        blurAmount: f32,
-      };
-      @group(0) @binding(3) var<uniform> uniforms: Uniforms;
-      
-      @compute @workgroup_size(8, 8)
-      fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
-        let inputDims = textureDimensions(inputTexture);
-        // let maskDims = textureDimensions(maskTexture);
-        
-        if (global_id.x >= inputDims.x || global_id.y >= inputDims.y) {
-          return;
-        }
-        
-        let coord = vec2<i32>(i32(global_id.x), i32(global_id.y));
-        let uv = (vec2<f32>(coord) + 0.5) / vec2<f32>(inputDims);
-        
-        let originalColor = textureSampleBaseClampToEdge(inputTexture, textureSampler, uv);
-        
-        // Calculate corresponding mask coordinate (handle different dimensions)
-        /*
-        let maskCoord = vec2<i32>(
-          i32(uv.x * f32(maskDims.x)),
-          i32(uv.y * f32(maskDims.y))
-        );
-        let mask = textureLoad(maskTexture, maskCoord, 0).${directOutput ? "b" : "r"};
-        */
-        
-        // Calculate blurred color for the background
-        var blurredColor = vec4<f32>(0.0);
-        var totalWeight = 0.0;
-        
-        // Use 9x9 kernel like WebGL2 (from -4 to +4)
-        for (var x = -4; x <= 4; x++) {
-          for (var y = -4; y <= 4; y++) {
-            let offset = vec2<f32>(f32(x), f32(y)) * uniforms.blurAmount / uniforms.resolution;
-            let weight = 1.0 / (1.0 + length(vec2<f32>(f32(x), f32(y))));
-            blurredColor += textureSampleBaseClampToEdge(inputTexture, textureSampler, uv + offset) * weight;
-            totalWeight += weight;
-          }
-        }
-        if (totalWeight > 0.0) {
-            blurredColor /= totalWeight;
-        }
-        
-        // Mix original and blurred colors based on the mask.
-        // let finalColor = mix(blurredColor, originalColor, mask);
-        // textureStore(outputTexture, coord, finalColor);
-        textureStore(outputTexture, coord, blurredColor);
-      }
-    `;
 
   // WebGPU compute shader for blur effect
   const kernelRadius = 4;

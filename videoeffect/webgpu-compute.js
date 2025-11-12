@@ -136,7 +136,47 @@ async function renderWithWebGPU(params, videoFrame, resourceCache) {
   computePass.dispatchWorkgroups(workgroupCountX, workgroupCountY);
   computePass.end();
 
+  if (!params.directOutput) {
+    const renderPipeline = getOrCreateResource(resourceCache, `renderPipeline_${width}x${height}`, () =>
+      device.createRenderPipeline({
+        layout: 'auto',
+        vertex: {
+          module: params.outputRendererVertexShader,
+          entryPoint: 'main',
+        },
+        fragment: {
+          module: params.getOutputRendererFragmentShader(device, width, height),
+          entryPoint: 'main',
+          targets: [{
+            format: navigator.gpu.getPreferredCanvasFormat(),
+          }],
+        },
+        primitive: {
+          topology: 'triangle-list',
+        },
+      }));
 
+    const renderBindGroup = device.createBindGroup({
+      layout: renderPipeline.getBindGroupLayout(0),
+      entries: [
+        { binding: 0, resource: outputTexture.createView() },
+        { binding: 1, resource: params.renderSampler },
+      ],
+    });
+    // Render to canvas
+    const renderPass = commandEncoder.beginRenderPass({
+      colorAttachments: [{
+        view: canvasTexture.createView(),
+        clearValue: { r: 0, g: 0, b: 0, a: 1 },
+        loadOp: 'clear',
+        storeOp: 'store',
+      }],
+    });
+    renderPass.setPipeline(renderPipeline);
+    renderPass.setBindGroup(0, renderBindGroup);
+    renderPass.draw(6);
+    renderPass.end();
+  }
   device.queue.submit([commandEncoder.finish()]);
 
   // Create a new VideoFrame from the processed WebGPU canvas
@@ -237,8 +277,48 @@ export async function createWebGPUBlurRenderer(
     minFilter: 'linear',
   });
 
+  const uniformBuffer = device.createBuffer({
+    // resolution: vec2<f32>, blurAmount: f32.
+    // vec2 is 8 bytes, f32 is 4. Total 12. Pad to 16 for alignment.
+    size: 16,
+    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+  });
   // Create a simple render pipeline to copy the compute shader's output (RGBA)
   // to the canvas, which might have a different format (e.g., BGRA).
+  const outputRendererVertexShader = device.createShaderModule({
+    code: `
+        @vertex
+        fn main(@builtin(vertex_index) vertexIndex: u32) -> @builtin(position) vec4<f32> {
+          var pos = array<vec2<f32>, 6>(
+            vec2<f32>(-1.0, -1.0),
+            vec2<f32>( 1.0, -1.0),
+            vec2<f32>(-1.0,  1.0),
+            vec2<f32>( 1.0, -1.0),
+            vec2<f32>( 1.0,  1.0),
+            vec2<f32>(-1.0,  1.0)
+          );
+          return vec4<f32>(pos[vertexIndex], 0.0, 1.0);
+        }
+      `
+  });
+  let outputRendererFragmentShader;
+  let lastDim;
+  function getOutputRendererFragmentShader(device, width, height) {
+    if (!outputRendererFragmentShader || lastDim !== `${width}x${height}`) {
+      outputRendererFragmentShader = device.createShaderModule({
+        code: `
+            @group(0) @binding(0) var inputTexture: texture_2d<f32>;
+            @group(0) @binding(1) var textureSampler: sampler;
+            @fragment
+            fn main(@builtin(position) coord: vec4<f32>) -> @location(0) vec4<f32> {
+              let uv = coord.xy / vec2<f32>(${width}.0, ${height}.0);
+              return textureSample(inputTexture, textureSampler, uv);
+            }
+          `});
+      lastDim = `${width}x${height}`;
+    }
+    return outputRendererFragmentShader;
+  }
 
   const renderSampler = device.createSampler({
     magFilter: 'linear',
@@ -255,7 +335,13 @@ export async function createWebGPUBlurRenderer(
         computePipeline,
         webgpuCanvas,
         blurSampler,
-        // uniformBuffer,
+        uniformBuffer,
+        outputRendererVertexShader,
+        getOutputRendererFragmentShader,
+        // segmentationWidth,
+        // segmentationHeight,
+        downscalePipeline: null,
+        downscaleSampler: null,
         renderSampler,
         ...params,
         segmenter
